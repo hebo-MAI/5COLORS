@@ -1,0 +1,552 @@
+/*****
+	5 COLORS
+	programmed by hebo-MAI ( http://argi.dip.jp )
+	copyright 2011 hebo-MAI ALL Rights Reserved.
+	charset:Shift-JIS
+	この著作権表示を変更してはいけません。
+	また、このプログラムはクリエイティブ・コモンズ・ライセンス 表示 - 非営利 - 継承 2.1 に基づいて配布されています。
+	ライセンスを遵守するならば、著作権表示を除いてこのプログラムを自由に改変し、それを非営利で配布する事ができます。
+	詳細は以下をご覧ください。
+	http://creativecommons.org/licenses/by-nc-sa/2.1/jp/
+	http://creativecommons.org/licenses/by-nc-sa/2.1/jp/legalcode
+	
+*****/
+
+//5953B
+#include "hsptv.as"
+;#module
+if 0{
+#define global SepiaColor _
+#deffunc SepiaColor int c
+	color c, c, c
+	return
+}
+;#global
+buffer 1
+
+
+//カーソル等描画
+color				:	boxf ,32;,100;,64
+SepiaColor 160	:	boxf 10,42,21,53
+SepiaColor 128	:	boxf 11,43,20,52
+SepiaColor 32	:	boxf 12,44,19,51
+
+color 192,220,192	:	boxf 43,43,52,52
+color 128,32,64		:	boxf 64,32,95,63
+color 64,32,64		:	boxf 65,33,94,62
+color 32,32,64		:	boxf 66,34,93,61
+color	:	boxf 67,35,92,60	:	boxf 44,44,51,51
+
+			;パネル用画像生成
+	repeat 10
+		cnty=cnt
+		repeat 30
+			key=255-cnt
+			/*if cnty==0:*/	hsvcolor 180,key,key			;赤
+			if cnty/*==1*/	:	hsvcolor 60,key,key				;緑
+			if cnty==2		:	hsvcolor 30,key,key				;黄
+			if cnty==3		:	color 150,key,key				;青(水色)
+			if cnty==4		:	color key,128,key			;桃
+			;if cnty==4		:	color 255-cnt/2,128-cnt/2,key
+			;if cnty==5		:	color 128-cnt/2,,key
+			if cnty==6		:	SepiaColor 128+cnt				;灰
+			;if cnty==7		:	color
+
+			key=32*cnty
+			line 31-cnt+key,1,2+key,30-cnt					;上の色パネルを描画
+			line 2+cnt+key,31,31+key,2+cnt
+
+			SepiaColor 96+cnty*128/10+cnt					;消去後の灰色の移り変わり
+			line 223-cnt,33+key,194,key+62-cnt
+			line 194+cnt,63+key,223,key+34+cnt
+		loop
+	loop
+screen
+
+#const TATE	12
+#const YOKO	8
+#const IRO	5
+#const CLEAR_TIME	75000	//75000
+#const ERASE_TIME	6000	//6000
+#const GAME_OVER_TIME	256000
+#const CLEAR_ERASE	30		//30
+#const NO_MORE_ERASE_POINT	500000
+#const GREAT_SCORE	500000
+#const POS_X		128
+#const POS_X32		160
+
+
+
+*start
+	cls			;clsを使うとcolor 0,0,0等が自動的に行われる
+	pos 485,440
+	mes "CREATED BY hebo-MAI\nargi.dip.jp"
+font "",32
+gmode 2	;透明色つきコピー
+	pos POS_X,352	:	mes "PUSH SPACE TO START"
+	;pos POS_X,96	:	mes "5 COLORS"
+	repeat 8			;タイトル描画
+		pos POS_X+cnt*20,96
+		//if cnt==0	:	color			:	mes "5"
+		if cnt	:else:	color			:	mes "5"
+		;if cnt==1	:	color 			:	mes " "
+		if cnt==2 	:	color 255		:	mes "C"
+		if cnt==3 	:	color ,255		:	mes "O"
+		if cnt==4 	:	color 200,200	:	mes "L"
+		if cnt==5 	:	color ,128,255	:	mes "O"
+		if cnt==6 	:	color 255,128,255:	mes "R"
+	loop
+						SepiaColor 128	:	mes "S"
+	redraw
+	repeat
+		stick key
+		if key==16	:	break
+		if key==128	:	end
+		await
+	loop
+
+*init_first
+;score=0	:	time=0	:	erase_count=0
+dim score	:	dim time	:	dim erase_count	:	dim endless_flag
+dim check
+dim field,YOKO,TATE	;フィールドを作成 (1,2,3,4,5,7)
+cursor=3	:	cursor_y=5
+
+gosub *color_init
+dim check_path,IRO,2	;カーソルの軌跡を記憶
+gosub *check_path_init
+randomize	;乱数の初期化
+
+
+*init
+;check=0		;パネルを選択しているかどうかを記憶 1なら選択モード 0なら非選択モード
+pget	:	boxf
+	repeat TATE
+	cnty=cnt
+		repeat YOKO
+				dup cnt_field,field(cnt,cnty)		;配列変数の置き換え
+			gosub *make_field
+			//if cnt!=0		(真 = 1以上  ,  偽 = 0)
+			if cnt :	if field(cnt-1,cnty)==cnt_field{	;左側と色が同じだった場合は再度抽選
+				gosub *make_field
+			}
+			//if cnty!=0
+			if cnty	:	if field(cnt,cnty-1)==cnt_field{	;上側と色が同じだった場合も再度抽選
+				gosub *make_field
+			}
+		loop
+	loop
+
+;over_time=0
+dim over_time
+
+*key_check
+
+redraw 0
+
+
+	dup cur_field	,	field(cursor,cursor_y)
+
+
+	time++
+	over_time+=limit(erase_count/10,0,100)+5
+
+	stick key
+	;if key==1	:	cursor+=YOKO-1		:	cursor\=YOKO
+	;if key==2	:	cursor_y+=TATE-1	:	cursor_y\=TATE		;上、左からのカーソルのループをチェック
+	if key==1	:	cursor+=7		;:	cursor\=YOKO
+	if key==2	:	cursor_y+=11	;:	cursor_y\=TATE
+	if key==4	:	cursor++	;:	cursor\=YOKO
+	if key==8	:	cursor_y++	;:	cursor_y\=TATE
+	cursor\=YOKO				;カーソルの座標をフィールド内に収める(ループ)
+	cursor_y\=TATE
+	if key&16	{
+		dim count
+		;check++		:	check\=2
+		check^=1
+	
+		//if check==0 {
+		if check	:	else {
+				repeat IRO
+					gosub *check_dup
+					if check0>=0	{
+						gosub *draw_mod_field
+					}
+				loop
+		}
+		gosub *color_init
+		gosub *check_path_init
+	}
+	if key&32	{
+		color 192,80;,0
+		pos 600,448
+			mes "*"
+		getkey key,17
+		if key and endless_flag<=0 {
+			erase_count=200
+		}
+		endless_flag++	;Enterキーを押すと、エンドレスモードフラグをONにする
+	}
+	if key==128	:	end				;Escキーを押すと終了
+	if key==1024:	goto *start		;Tabキーを押すとタイトル画面へ
+
+
+	//if (key==1 or key==2 or key==4 or key==8) and check==1
+	if (key==1 or key==2 or key==4 or key==8) and check {
+		count++
+		;if count>IRO-1	{
+		if count>4		{
+			repeat IRO				;グラフィック修正
+				gosub *draw_mod_field
+			loop
+			;check=0	:	count=0
+			dim check	:	dim count
+			gosub *check_path_init	;移動回数が色数より多いと選択モードを抜ける
+		}
+	}
+	
+	//if check!=0
+	if check {
+
+		repeat IRO		;何も代入されていない要素に上書き
+			gosub *check_dup
+			;if (check0==-1) and (check1==-1) {
+			if check0<0 and check1<0 {
+				check0=cursor
+				check1=cursor_y
+				break	;一度代入した後は抜ける
+			}
+		loop
+		;repeat IRO-1		;隣り合う要素が同じときは一方を-1に戻す
+		repeat 4
+			gosub *check_dup
+			gosub *check_path_dup
+			if (check0==check_path0) and (check1==check_path1) {
+				check_path0=-1	:	check_path1=check_path0	:	break
+			}
+		loop
+	}
+
+	if cur_field<7{	;色ブロック以外を選択したときは無効
+		dup check0	,	color_check(cur_field-1)
+		//if check==1 and check0!=1
+		if check and (check0!=1) {
+			;color_check(cur_field-1)=1	;色判定変数の、現在のカーソル位置と同色の箇所にフラグを入れる
+			;check0=1
+			check0++
+
+			;key=0
+			dim key
+			repeat IRO							;5色揃っているかどうか確認
+				if color_check(cnt)	:	key++
+			loop
+
+			;if key!=0 {
+			if key==IRO {
+				erase_count++
+					repeat IRO
+						gosub *check_dup
+						field(check0,check1)=7
+						gosub *draw_mod_field
+					loop
+				;over_time-=limit(50000-gray_count*1200,0,50000)
+				;over_time=limit(over_time,0,GAME_OVER_TIME)
+				over_time=limit(over_time-limit(50000-gray_count*1200,0,50000),0,GAME_OVER_TIME)
+				;check=0	;消去の後非選択モードに戻す
+				dim check
+				gosub *color_init
+					gosub *check_erase
+				if gray_flag>2500+gray_count*80	:	gray_flag=2500+gray_count*80		;消去時間ぎりぎりで消去されたパネルがあるときは時間を少し延長
+				if gray_flag>5400					:	gray_flag=5400
+			}
+		}
+	}
+
+	
+	;gray_count=0	;灰色のマスの数を求める
+	dim gray_count
+	repeat TATE
+	cnty=cnt
+		repeat YOKO
+				dup cnt_field,field(cnt,cnty)		;配列変数の置き換え
+			pos POS_X32+cnt*32,32+cnty*32	;描画
+			gcopy 1,cnt_field*32-32;,0,32,32
+			if cnt_field==7	{
+				if gray_flag>ERASE_TIME	{
+					gosub *make_field
+					;if cnt!=0 {	;左側と色が同じだった場合は再度抽選
+					if cnt {
+						if field(cnt-1,cnty)==cnt_field{
+							gosub *make_field
+						}
+					}/* else {					;左が無いときは右端と比較
+						;if cnt_field==field(YOKO-1,cnty){
+						if cnt_field==field(7,cnty) or cnt_field==field(cnt,11){
+							gosub *make_field
+						}
+					}*/
+					;if cnty!=0 {	;上側と色が同じだった場合は再度抽選
+					if cnty {
+						if field(cnt,cnty-1)==cnt_field{
+							gosub *make_field
+						}
+					}/* else {					;上がないときは下端と比較
+						;if cnt_field==field(cnt,TATE-1){
+						if cnt_field==field(cnt,11){
+							gosub *make_field
+						}
+					}*/
+					gosub *add_score		//スコア処理
+
+				}
+				gray_count++
+				gcopy 1,192,(gray_flag/500)*32;,32,32	;7*32-32=192
+			}
+		loop
+	loop
+
+	;if check==1	{
+	if check	{
+		repeat IRO
+			if check_path(cnt)>=0	{
+				gosub *check_dup
+				;pos POS_X+check_path(cnt)*32+32,check_path(cnt,1)*32+32
+				pos POS_X32+check0*32,check1*32+32
+				gcopy 1,64,32;,32,32		;選択した範囲のフレームの表示
+			}
+		loop
+	}
+	
+	pos POS_X32+cursor*32,32+cursor_y*32		;カーソルの表示
+	gcopy 1,check*32,32;,32,32
+	
+	if gray_flag>ERASE_TIME	{
+		;gray_flag=0
+		dim gray_flag
+					if erase_count>=CLEAR_ERASE and endless_flag==0 {
+						gosub *zero_pos	:	gosub *title_show	:	pos 0,416;448-32=416
+						color
+						mes_str="GAME CLEAR   PUSH ENTER TO RESTART"
+						if time<CLEAR_TIME {
+							if score>GREAT_SCORE	:	mes "YOU ARE GREAT!\n"
+							mes mes_str+"\nIN GAME , START ENDLESS"
+						} else {
+							mes mes_str
+						}
+						goto *game_stop
+					}
+	}
+	;if gray_count!=0	:	gray_flag++
+	if gray_count	:	gray_flag++
+				gosub *title_show
+
+redraw; 1
+
+	if over_time>=GAME_OVER_TIME {
+		gosub *zero_pos	:	gosub *title_show	:	pos 0;448-32=416
+		mes "GAME OVER\nPUSH ENTER"
+		goto *game_stop
+	}
+await
+
+goto *key_check
+
+
+*make_field
+	await
+	cnt_field=rnd(IRO)+1	;フィールドを乱数により生成
+return
+
+*check_dup
+	dup check1,check_path(cnt,1)	;
+	dup check0,check_path(cnt)		;cnty
+return
+
+*game_stop
+	redraw; 1
+	repeat
+		stick key
+		if key==32	:	goto *start			;Enterキーでタイトル画面へ
+		if key==128	:	end					;Escで終了
+	;if key==16	:	goto *init_first
+		await
+	loop
+;return
+
+*title_show
+	gosub *zero_pos
+	pos 424,0	;448,0
+	mes "erase:"+ erase_count + "\nscore:" + score + " \ntime:" + time; + " \nover:" + over_time/1000
+	repeat 256
+		if 256-over_time/1000<cnt	:	break
+			hsvcolor cnt/2,240,240-cnt/4
+			line 112,416-cnt,127,416-cnt
+	loop
+return
+
+*zero_pos
+	pget 3200	:	boxf 448,,640,128
+	boxf ,,128,480
+	pos POS_X/*,0*/	:	color
+return
+
+*add_score
+	score+=powf(gray_count,1.5)*(gray_count-1)/2
+return
+
+*check_path_init		;変数の初期化(全要素を-1に更新)
+	memset check_path,0xff,40		;8*IRO	;4*2*IRO
+return
+
+*check_path_dup
+	//配列変数のコピーを作成
+	dup check_path0,check_path(cnt+1)
+	dup check_path1,check_path(cnt+1,1)
+return
+
+*color_init				;色チェックの初期化
+	dim color_check,IRO
+return
+
+*draw_mod_field
+	gosub *check_dup
+	dup check_field,field(check0,check1)
+return
+
+
+*check_erase			;消去可能なパネルの有無の判定
+	;erase_cur_flag=0
+	dim erase_cur_flag
+	repeat TATE
+	cnty=cnt
+		repeat YOKO
+			dim erase,5
+			check_cur_x=cnt	:	check_cur_y=cnty	;(cntx,cnty)の位置から探索開始
+			;path=0			;なくても動く
+			gosub *stack_push
+			gosub *check_arrow
+			if erase_cur_flag	:	break
+			//if erase_cur_flag!=0
+				//erase_cur_flag==IRO のときは、消す場所が存在したことを示す
+		loop
+		//if erase_cur_flag!=0
+		if erase_cur_flag	:	break
+	loop
+	;if erase_cur_flag!=0
+	if erase_cur_flag	{
+		return				;if erase_cur_flag==0	{			;消す場所がない場合
+	} else {
+		pos 96,448
+		color
+		mes "NO MORE ERASE"
+		redraw; 1
+		gosub *add_score
+		score+=NO_MORE_ERASE_POINT
+		wait 300					;3秒待つ
+		goto *init
+	}
+return
+
+*check_arrow
+	path++
+	dup ep	,	erase(path)
+	gosub *check_left	:	dim ep	;pop
+	gosub *check_up		:	dim ep
+	gosub *check_right	:	dim ep
+	gosub *check_down	:	dim ep
+	path--
+return
+
+*check_left				;左方向探索
+	gosub *arrow_left
+	gosub *stack_push
+		//if cnty!=0	{
+		if cnty {
+			gosub *arrow_right
+			return	;同色が存在すれば色探索をやめる
+		}
+	//if erase_cur_flag!=0
+	if erase_cur_flag	:	return
+	gosub *check_arrow
+return
+
+*check_up				;上方向探索
+	gosub *arrow_up
+	gosub *stack_push
+		if cnty	{
+			gosub *arrow_down
+			return	;同色が存在すれば色探索をやめる
+		}
+	if erase_cur_flag	:	return
+	gosub *check_arrow
+return
+
+*check_right			;右方向探索
+	gosub *arrow_right
+	gosub *stack_push
+		if cnty	{
+			gosub *arrow_left
+			return	;同色が存在すれば色探索をやめる
+		}
+	if erase_cur_flag	:	return
+	gosub *check_arrow
+return
+
+*check_down				;下方向探索
+	gosub *arrow_down
+	gosub *stack_push
+		if cnty	{
+			gosub *arrow_up
+			return	;同色が存在すれば色探索をやめる
+		}
+	if erase_cur_flag	:	return
+	gosub *check_arrow
+return
+
+
+*stack_push
+	dim cnty
+	dup chk_field	,	field(check_cur_x,check_cur_y)
+	erase(path)=chk_field	;スタックに色情報を入れる(1,2,3,4,5,7)
+	//経路が長い、または灰色ブロックを経路に含んだ時
+	if path>4 or chk_field==7 {
+		cnty++
+	}
+	gosub *check_cur_erase
+return
+
+*check_cur_erase
+	;if path<IRO-1	:	return
+	if path<4 /*or path==0*/	:	return
+	dim check_colors,IRO
+	repeat IRO							;スタックから色情報を写す
+		check_colors(erase(cnt)-1)++	;色が存在する時は値を1に、存在しないときは0に。 要素0～4に代入
+	loop
+	dim key
+	repeat IRO							;5色揃っているかどうか確認
+				;(色が揃っていないとき、つまり少なくとも1つ以上の要素が0のときは揃っていないパターン)
+		if check_colors(cnt)==1	:	key++
+	loop
+	if key==IRO		{		;色が揃っていた場合は
+		erase_cur_flag++	;フラグを1にする
+	}
+return
+
+*arrow_up
+	;check_cur_y+=TATE-1	:	check_cur_y\=TATE
+	check_cur_y+=11			:	check_cur_y\=TATE
+return
+
+*arrow_down
+	check_cur_y++		:	check_cur_y\=TATE
+return
+
+*arrow_left
+	;check_cur_x+=YOKO-1	:	check_cur_x\=YOKO
+	check_cur_x+=7			:	check_cur_x\=YOKO
+return
+
+*arrow_right
+	check_cur_x++		:	check_cur_x\=YOKO
+return
+
